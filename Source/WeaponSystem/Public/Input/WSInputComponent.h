@@ -7,38 +7,54 @@
 #include "WSInputConfig.h"
 #include "WSInputComponent.generated.h"
 
-class UInputMappingContext;
-class UEnhancedInputLocalPlayerSubsystem;
-class UWSAbilitySystemComponent;
+class AWSCharacter;
 
-UCLASS()
+/**
+ *  UWSInputComponent
+ *
+ *	Component used to manage input mappings and bindings using an input config data asset.
+ */
+UCLASS(Config = Input)
 class WEAPONSYSTEM_API UWSInputComponent : public UEnhancedInputComponent
 {
 	GENERATED_BODY()
 
 public:
-	UWSInputComponent();
-	
-protected:
-	UPROPERTY(EditDefaultsOnly, Category = "Inputs")
-	TObjectPtr<UWSInputConfig> InputConfig;
-
-	UPROPERTY(EditDefaultsOnly, Category = "Inputs")
-	TObjectPtr<UInputMappingContext> DefaultMapping;
-
-	TWeakObjectPtr<UWSAbilitySystemComponent> OwnerASC;
-	
-public:
 	template<class UserClass, typename FuncType>
 	void BindNativeAction(const UWSInputConfig* InputConfig, const FGameplayTag& InputTag, ETriggerEvent TriggerEvent, UserClass* Object, FuncType Func);
-
+	
 	template<class UserClass, typename PressedFuncType, typename ReleasedFuncType>
 	void BindAbilityActions(const UWSInputConfig* InputConfig, UserClass* Object, PressedFuncType PressedFunc, ReleasedFuncType ReleasedFunc);
-	
-	void InitializePlayerInputs(UEnhancedInputLocalPlayerSubsystem* Subsystem);
-
-	void Input_AbilityInputTagPressed(FGameplayTag InputTag);
-	void Input_AbilityInputTagReleased(FGameplayTag InputTag);
-
-	void Input_Move(const FInputActionValue& InputActionValue);
 };
+
+template <class UserClass, typename FuncType>
+void UWSInputComponent::BindNativeAction(const UWSInputConfig* InputConfig, const FGameplayTag& InputTag, ETriggerEvent TriggerEvent, UserClass* Object, FuncType Func)
+{
+	check(InputConfig);
+	if (const UInputAction* InputAction = InputConfig->FindNativeInputActionForTag(InputTag))
+	{
+		BindAction(InputAction, TriggerEvent, Object, MoveTemp(Func));
+	}
+}
+
+template <class UserClass, typename PressedFuncType, typename ReleasedFuncType>
+void UWSInputComponent::BindAbilityActions(const UWSInputConfig* InputConfig, UserClass* Object, PressedFuncType PressedFunc, ReleasedFuncType ReleasedFunc)
+{
+	check(InputConfig);
+	
+	for (const FWSInputAction& Action : InputConfig->AbilityInputActions)
+	{
+		if (Action.InputAction && Action.InputTag.IsValid())
+		{
+			if (PressedFunc)
+			{
+				BindAction(Action.InputAction, ETriggerEvent::Started, Object, PressedFunc, Action.InputTag).GetHandle();
+			}
+
+			if (ReleasedFunc)
+			{
+				BindAction(Action.InputAction, ETriggerEvent::Completed, Object, ReleasedFunc, Action.InputTag).GetHandle();
+			}
+		}
+	}
+}
